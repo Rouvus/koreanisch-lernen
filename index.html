@@ -1467,8 +1467,8 @@
    öffentlich erreichbar ist. Bleibt es leer, sagt die App das offen,
    statt eine leere Zeile zu zeigen.
    ========================================================= */
-const APP_VERSION = '1.25.0';
-const APP_BUILD = '16963183decb';
+const APP_VERSION = '1.25.1';
+const APP_BUILD = 'd959f7e6417f';
 /* Die Felder folgen dem, was § 5 DDG (früher § 5 TMG) für ein Impressum
    verlangt — die frühere Fassung hatte nur Name, Ort und Mail, und das
    reicht nachweislich nicht:
@@ -1618,6 +1618,7 @@ function appBuildLabel(){
    will, was ihm entgeht. Bewusst nur die letzten Einträge — eine
    vollständige Chronik gehört ins Projekt-Dokument, nicht in die App. */
 const CHANGELOG = [
+  { v:'1.25.1', text:'Die Datenschutzerklärung öffnet sich wieder, auch wenn die App schon einmal benutzt wurde. Die Sprachaufnahmen bleiben bei einer neuen Fassung erhalten, statt jedes Mal neu geladen zu werden. Und die Lektionszahl ist überall dieselbe — die Wiederholungen zählen nicht mehr mit.' },
   { v:'1.25.0', text:'Wichtige Korrektur beim Zeichenmalen: ㅘ ㅙ ㅚ ㅝ ㅞ ㅟ unterscheiden sich nur darin, ob der Stiel über oder unter dem Querstrich sitzt — diese Unterscheidung war zuletzt aufgeweicht und ist wiederhergestellt.' },
   { v:'1.24.0', text:'Beim Zeichenmalen sagt die App jetzt klar, wenn du einen anderen Buchstaben gemalt hast, statt „die Form stimmt noch nicht ganz" — dann liegt es nämlich nicht an deiner Strichführung.' },
   { v:'1.23.0', text:'Was über den Rand der Malfläche hinausgezogen wird, verzerrt die Erkennung nicht mehr — gewertet wird, was man sieht. Und die Doppelkonsonanten werden auch dann erkannt, wenn sie sehr breit und flach geraten.' },
@@ -9961,7 +9962,7 @@ function buildPathSection(label){
 function buildHomeTitleBanner(){
   const banner = document.createElement('div');
   banner.className = 'unit-banner';
-  banner.innerHTML = `<span class="banner-text">한국어 배우기<small>Von Hangul bis zu deinen ersten Sätzen – ${COURSE.length} Lektionen</small></span><div class="banner-blossoms" aria-hidden="true">${bluetenSpan()}${bluetenSpan()}${bluetenSpan()}</div>`;
+  banner.innerHTML = `<span class="banner-text">한국어 배우기<small>Von Hangul bis zu deinen ersten Sätzen – ${courseFacts().lektionen} Lektionen</small></span><div class="banner-blossoms" aria-hidden="true">${bluetenSpan()}${bluetenSpan()}${bluetenSpan()}</div>`;
   return banner;
 }
 /* Merkt sich pro Einheit, ob ihre Schriftrolle gerade aufgerollt (offen)
