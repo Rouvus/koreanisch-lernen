@@ -1467,8 +1467,8 @@
    öffentlich erreichbar ist. Bleibt es leer, sagt die App das offen,
    statt eine leere Zeile zu zeigen.
    ========================================================= */
-const APP_VERSION = '1.25.1';
-const APP_BUILD = 'f608fab2ad22';
+const APP_VERSION = '1.26.0';
+const APP_BUILD = 'c7200c080155';
 /* Die Felder folgen dem, was § 5 DDG (früher § 5 TMG) für ein Impressum
    verlangt — die frühere Fassung hatte nur Name, Ort und Mail, und das
    reicht nachweislich nicht:
@@ -1618,6 +1618,7 @@ function appBuildLabel(){
    will, was ihm entgeht. Bewusst nur die letzten Einträge — eine
    vollständige Chronik gehört ins Projekt-Dokument, nicht in die App. */
 const CHANGELOG = [
+  { v:'1.26.0', text:'Der Tag wechselt jetzt um Mitternacht, nicht erst um 1 oder 2 Uhr nachts. Die App bittet den Browser, deinen Fortschritt dauerhaft aufzuheben, und sagt auf dem iPhone einmal, wie er sicher bleibt. Kann sie gerade nicht speichern, erfährst du es sofort. Und neue Lektionen werden vor dem Übernehmen gründlicher geprüft.' },
   { v:'1.25.1', text:'Die Datenschutzerklärung öffnet sich wieder, auch wenn die App schon einmal benutzt wurde. Die Sprachaufnahmen bleiben bei einer neuen Fassung erhalten, statt jedes Mal neu geladen zu werden. Und die Lektionszahl ist überall dieselbe — die Wiederholungen zählen nicht mehr mit.' },
   { v:'1.25.0', text:'Wichtige Korrektur beim Zeichenmalen: ㅘ ㅙ ㅚ ㅝ ㅞ ㅟ unterscheiden sich nur darin, ob der Stiel über oder unter dem Querstrich sitzt — diese Unterscheidung war zuletzt aufgeweicht und ist wiederhergestellt.' },
   { v:'1.24.0', text:'Beim Zeichenmalen sagt die App jetzt klar, wenn du einen anderen Buchstaben gemalt hast, statt „die Form stimmt noch nicht ganz" — dann liegt es nämlich nicht an deiner Strichführung.' },
@@ -4767,6 +4768,60 @@ function kursPaketPruefen(paket){
     if(typeof l.title !== 'string' || !l.title) return 'Lektion „' + l.id + '" hat keinen Titel.';
     if(gesehen.has(l.id)) return 'Die Kennung „' + l.id + '" kommt doppelt vor.';
     gesehen.add(l.id);
+    const inhaltFehler = lektionInhaltPruefen(l);
+    if(inhaltFehler) return 'Lektion „' + l.id + '": ' + inhaltFehler;
+  }
+  return null;
+}
+/* Was eine Lektion je nach Art mitbringen muss, damit die Übungen sich
+   bauen lassen. Bis 1.25.1 wurden nur Kennung und Titel geprüft — eine
+   kurs.json mit einer Vokabel ohne Übersetzung wäre durchgegangen und
+   hätte die Lektion bei allen Nutzern unbrauchbar gemacht, bis zum
+   nächsten Kursstand. Geprüft wird das Gerüst, nicht der Wortlaut. */
+const LEKTIONS_ARTEN = ['hangul', 'vocab', 'grammar', 'concept'];
+function lektionInhaltPruefen(l){
+  if(LEKTIONS_ARTEN.indexOf(l.type) === -1) return 'unbekannte Art „' + l.type + '".';
+  const istText = (t) => typeof t === 'string' && t.length > 0;
+  if(l.type === 'vocab'){
+    if(!Array.isArray(l.vocab) || l.vocab.length === 0) return 'keine Vokabeln.';
+    for(const v of l.vocab){
+      if(!v || !istText(v.kr) || !istText(v.de)) return 'eine Vokabel ohne Koreanisch oder Deutsch.';
+    }
+  }
+  if(l.type === 'hangul'){
+    if(!Array.isArray(l.letters) || !Array.isArray(l.words)) return 'Buchstaben oder Wörter fehlen.';
+    for(const w of l.words){
+      if(!w || !istText(w.kr) || !istText(w.de)) return 'ein Wort ohne Koreanisch oder Deutsch.';
+    }
+  }
+  if(l.type === 'grammar' && (!l.grammar || typeof l.grammar !== 'object')) return 'der Grammatikteil fehlt.';
+  if(l.type === 'concept' && !l.concept) return 'der Erklärungsteil fehlt.';
+  if(l.templateIds !== undefined){
+    if(!Array.isArray(l.templateIds)) return 'templateIds ist keine Liste.';
+    /* TEMPLATES ist beim allerersten Prüfen (Start, kursAusSpeicher) noch
+       nicht angelegt — dann bleibt diese Prüfung dem Abgleich überlassen,
+       der läuft erst, wenn die App vollständig steht. */
+    let vorlagen = null;
+    try{ vorlagen = TEMPLATES; }catch(e){ vorlagen = null; }
+    if(vorlagen){
+      for(const t of l.templateIds){
+        if(!vorlagen[t]) return 'die Vorlage „' + t + '" gibt es in dieser Fassung der App nicht.';
+      }
+    }
+  }
+  return null;
+}
+/* Der letzte Schritt vor dem Übernehmen: Aus jeder neuen Lektion
+   einmal probehalber Übungen bauen. Das findet, was die Gerüstprüfung
+   nicht sehen kann — ein Feld in einer Form, mit der der Code nicht
+   rechnet. Scheitert eine, wird das Paket abgelehnt, statt einen Kurs
+   zu verteilen, der an Lektion 37 abstürzt. */
+function kursProbelauf(inh){
+  for(const l of inh.COURSE){
+    let schritte = null;
+    try{ schritte = generateExercises(l); }
+    catch(e){ return 'Lektion „' + l.id + '" lässt sich nicht aufbauen (' + (e && e.message || e) + ').'; }
+    if(!Array.isArray(schritte) || schritte.length === 0) return 'Lektion „' + l.id + '" ergibt keine Übungen.';
   }
   return null;
 }
@@ -4962,7 +5017,17 @@ checkDuplicateMeanings();
    STATE + SPEICHERN (localStorage, überlebt Neuladen/App-Neustart)
 ========================================================= */
 const STORAGE_KEY = 'koreanLearnProgress_v1';
-function todayStr(){ return new Date().toISOString().slice(0,10); }
+/* Das Datum, das auf dem Gerät gerade gilt — nicht das in London.
+   Bis 1.25.1 stand hier toISOString(), und das rechnet in UTC: Der
+   Tag wechselte damit in Deutschland erst um 1 Uhr (im Sommer 2 Uhr),
+   in Korea schon um 9 Uhr morgens. Wer kurz nach Mitternacht lernte,
+   lernte für gestern. Alles andere (addDaysStr, daysBetweenStr) rechnet
+   mit diesen Zeichenketten weiter und bleibt deshalb unverändert. */
+function todayStr(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+    + '-' + String(d.getDate()).padStart(2, '0');
+}
 function loadState(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -4990,7 +5055,33 @@ function saveState(){
       settings,
       onboarding
     }));
-  }catch(e){ /* Speichern nicht verfügbar (z. B. privater Modus) */ }
+  }catch(e){ speicherFehlerMelden(); }
+}
+/* Schlägt das Speichern fehl (Speicher voll, vom Browser gesperrt),
+   lernt man sonst weiter und verliert beim nächsten Start alles — ohne
+   es je erfahren zu haben. Einmal pro Sitzung sagen, nicht bei jedem
+   der vielen Speichervorgänge. Verzögert, weil saveState auch mitten
+   im Aufbau der Seite gerufen wird. */
+var speicherFehlerGemeldet = false;
+function speicherFehlerMelden(){
+  if(speicherFehlerGemeldet) return;
+  speicherFehlerGemeldet = true;
+  setTimeout(() => {
+    try{
+      showChoiceDialog({
+        title:'Dein Fortschritt wird gerade nicht gespeichert',
+        message:'Der Browser lässt die App im Moment nichts ablegen — meist ist der Speicher '
+          + 'des Geräts voll, oder das Speichern ist für diese Seite gesperrt. Du kannst '
+          + 'weiterlernen, aber nach dem Schließen wäre der heutige Stand weg.<br><br>'
+          + 'Am sichersten: in den Einstellungen unter „Fortschritt sichern“ eine Sicherung '
+          + 'erstellen. Danach Platz auf dem Gerät schaffen.',
+        buttons:[
+          { label:'Zur Sicherung', className:'btn-primary', onClick:() => showScreen('settings') },
+          { label:'Weiterlernen', className:'btn-gray' }
+        ]
+      });
+    }catch(e){ /* noch keine Oberfläche — dann eben beim nächsten Fehlschlag */ speicherFehlerGemeldet = false; }
+  }, 0);
 }
 const saved = loadState();
 let xp = saved ? (saved.xp || 0) : 0;
@@ -13106,6 +13197,7 @@ updateHeaderStats();
 showHomeAtCurrentLesson();
 maybeOfferResume();
 kursErinnerungVielleicht();
+speicherAbsichern();
 updatePracticeIndicator();
 $('jumpBtn').onclick = showUnitJumpDialog;
 updateJumpBtn();
@@ -13363,7 +13455,8 @@ async function kursAbgleich(){
     });
     return;
   }
-  const fehler = kursPaketPruefen(paket);
+  const fehler = kursPaketPruefen(paket)
+    || (paket.stand.nummer > kursStandAktiv.nummer ? kursProbelauf(paket.inhalt) : null);
   if(fehler){
     showChoiceDialog({
       title:'Kursdatei nicht verwendbar',
@@ -13461,6 +13554,48 @@ function kursErinnerungVielleicht(){
     buttons:[
       { label:'Jetzt nachsehen', className:'btn-primary', onClick:() => { merken(); kursAbgleich(); } },
       { label:'Später', className:'btn-gray', onClick: merken }
+    ]
+  });
+}
+
+/* =========================================================
+   DEN LERNSTAND VOR DEM BROWSER SCHÜTZEN
+   =========================================================
+   Browser dürfen den Speicher einer Webseite räumen, wenn das Gerät
+   knapp wird. Safari auf dem iPhone geht weiter: Eine Seite, die sieben
+   Tage lang nicht geöffnet wurde, verliert ihren gesamten Speicher —
+   bei uns also XP, Streak und jede gelernte Vokabel. Das gilt NICHT
+   für eine App auf dem Home-Bildschirm.
+
+   Zweierlei: Erstens den Browser um dauerhaften Speicher bitten (kostet
+   nichts, wird oft gewährt, und sonst ändert sich nichts). Zweitens
+   auf dem iPhone im Browser-Tab EINMAL sagen, was droht — erst wenn
+   es etwas zu verlieren gibt, und nicht mitten in eine andere Meldung.
+
+   Wichtig für den Text: Die Home-Bildschirm-App hat auf dem iPhone
+   einen EIGENEN Speicher. Der Fortschritt aus Safari zieht nicht von
+   allein mit — deshalb gehört die Sicherung in den Hinweis. */
+function speicherAbsichern(){
+  if(!location.protocol.startsWith('http')) return;
+  try{
+    if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  }catch(e){}
+  if(!isIosSafari()) return;
+  if(onboarding.speicherHinweis) return;
+  if(!onboarding.hangulAsked || openSession || completed.size === 0) return;
+  if(document.querySelector('.modal-overlay')) return;
+  onboarding.speicherHinweis = true;
+  saveState();
+  showChoiceDialog({
+    title:'Damit dein Fortschritt bleibt',
+    message:'Safari löscht alles, was eine Webseite gespeichert hat, wenn du sie sieben Tage '
+      + 'nicht öffnest — hier also deinen ganzen Lernstand.<br><br>'
+      + 'Auf dem Home-Bildschirm passiert das nicht: unten auf „Teilen“ tippen, dann auf '
+      + '„Zum Home-Bildschirm“. Die App dort fängt allerdings neu an. Erstelle deshalb vorher '
+      + 'in den Einstellungen eine Sicherung und spiel sie in der neuen App wieder ein.',
+    buttons:[
+      { label:'Zur Sicherung', className:'btn-primary', onClick:() => showScreen('settings') },
+      { label:'Verstanden', className:'btn-gray' }
     ]
   });
 }
