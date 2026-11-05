@@ -19,7 +19,7 @@
    VERSION wird beim Bauen (build-pwa.sh) automatisch gesetzt. Ändert
    sich die App, ändert sich die Version, und der alte Speicher wird
    verworfen — der für die Aufnahmen ausdrücklich nicht. */
-const VERSION = 'd959f7e6417f';
+const VERSION = 'f608fab2ad22';
 const CACHE = 'koreanisch-' + VERSION;
 /* Ohne Version im Namen, und das ist der ganze Punkt: Die Dateinamen
    der Aufnahmen sind Prüfsummen ihres Textes, eine Datei ändert sich
